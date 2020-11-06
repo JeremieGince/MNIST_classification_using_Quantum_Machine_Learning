@@ -1,5 +1,6 @@
 import pennylane.numpy as np
 from sklearn.model_selection import KFold
+from Modules.models import BaseModel
 
 
 class ParamGen:
@@ -74,7 +75,7 @@ def optimize_parameters(model_cls, X, y, param_gen: ParamGen, n_splits: int = 2)
     param_gen.reset()
     for i in range(len(param_gen)):
         params = param_gen.get_param()
-        clf = model_cls(**params)
+        clf: BaseModel = model_cls(**params)
         kf = KFold(n_splits=n_splits, shuffle=False)
 
         mean_score = 0
