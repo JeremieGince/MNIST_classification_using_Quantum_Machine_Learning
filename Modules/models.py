@@ -1,8 +1,8 @@
 import torch
 import pennylane as qml
 
-N_QUBITS = 2
-quantum_device = qml.device("default.qubit", wires=N_QUBITS)
+N_QBITS = 2
+quantum_device = qml.device("default.qubit", wires=N_QBITS)
 
 
 class BaseModel(torch.nn.Module):
@@ -29,7 +29,7 @@ class HybridModel(BaseModel):
 
         self.n_layers = 6
 
-        weight_shapes = {"weights": (self.n_layers, N_QUBITS)}
+        weight_shapes = {"weights": (self.n_layers, N_QBITS)}
 
         self.clayer_1 = torch.nn.Linear(2, 4)
         self.qlayer_1 = qml.qnn.TorchLayer(self.qnode, weight_shapes)
@@ -48,9 +48,9 @@ class HybridModel(BaseModel):
 
     @qml.qnode(quantum_device)
     def qnode(self, inputs, weights):
-        qml.templates.AngleEmbedding(inputs, wires=range(N_QUBITS))
-        qml.templates.BasicEntanglerLayers(weights, wires=range(N_QUBITS))
-        return [qml.expval(qml.PauliZ(wires=i)) for i in range(N_QUBITS)]
+        qml.templates.AngleEmbedding(inputs, wires=range(N_QBITS))
+        qml.templates.BasicEntanglerLayers(weights, wires=range(N_QBITS))
+        return [qml.expval(qml.PauliZ(wires=i)) for i in range(N_QBITS)]
 
 
 class ClassicalModel(BaseModel):
