@@ -125,7 +125,9 @@ class BaseModel(torch.nn.Module):
     def apply_criterion(self, output, targets, **kwargs):
         return kwargs["criterion"](output, targets)
 
-    def predict(self, X, use_cuda=True):
+    def predict(self, X, use_cuda=None):
+        if use_cuda is None:
+            use_cuda = self.default_use_cuda
         X = torch.tensor(X).float()
         if use_cuda:
             [X] = self.move_on_gpu(X)
@@ -134,7 +136,10 @@ class BaseModel(torch.nn.Module):
         y_pred = self(X)
         return torch.argmax(y_pred, axis=1).cpu().detach().numpy()
 
-    def score(self, X, y, use_cuda=True):
+    def score(self, X, y, use_cuda=None):
+        if use_cuda is None:
+            use_cuda = self.default_use_cuda
+
         X = torch.tensor(X).float()
         y = torch.tensor(y).float()
         if use_cuda:
