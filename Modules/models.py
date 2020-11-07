@@ -224,13 +224,14 @@ class HybridModel(BaseModel):
 class ClassicalModel(BaseModel):
     def __init__(self):
         super().__init__()
-        self.clayer_1 = torch.nn.Linear(2, 4)
+        self.clayer_1 = torch.nn.Linear(8*8, 4)
         self.clayer_2 = torch.nn.Linear(2, 2)
         self.clayer_3 = torch.nn.Linear(2, 2)
-        self.clayer_4 = torch.nn.Linear(4, 2)
+        self.clayer_4 = torch.nn.Linear(4, 10)
         self.softmax = torch.nn.Softmax(dim=1)
 
     def forward(self, x):
+        x = torch.reshape(x, (x.shape[0], -1))
         x = self.clayer_1(x)
         x_1, x_2 = torch.split(x, 2, dim=1)
         x_1 = self.clayer_2(x_1)
@@ -241,10 +242,10 @@ class ClassicalModel(BaseModel):
 
 
 if __name__ == '__main__':
-    from Modules.datasets import MoonDataset
+    from Modules.datasets import MNISTDataset
     c_model = ClassicalModel()
 
-    moon_dataset = MoonDataset()
-    history = c_model.fit(moon_dataset.X, moon_dataset.y_hot, moon_dataset.X, moon_dataset.y_hot, batch_size=5)
-    print(c_model.score(moon_dataset.X, moon_dataset.y_hot))
+    mnist_dataset = MNISTDataset()
+    history = c_model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32)
+    print(c_model.score(*mnist_dataset.getTestData()))
     c_model.show_history(history)
