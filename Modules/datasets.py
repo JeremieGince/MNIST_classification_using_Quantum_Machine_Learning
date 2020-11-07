@@ -37,8 +37,8 @@ class MoonDataset(Dataset):
     def getTestData(self):
         return self.Xtest, self.yTest_hot
 
-    def getTrainData(self):
-        return self.Xtrain, self.yTrain_hot
+    def getValidationData(self):
+        return self.Xval, self.yVal_hot
 
     def show(self):
         c = ["#1f77b4" if y_ == 0 else "#ff7f0e" for y_ in self.y]  # colours for each class
