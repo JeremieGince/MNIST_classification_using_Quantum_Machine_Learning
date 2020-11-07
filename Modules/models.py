@@ -24,7 +24,7 @@ class BaseModel(torch.nn.Module):
     def set_hp(self, **hp):
         raise NotImplementedError()
 
-    def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
+    def _set_fit_kwargs(self, **kwargs):
         optimizer_parameters = kwargs.get("optimizer_parameters",
                                           {
                                               "lr": 0.01,
@@ -40,6 +40,10 @@ class BaseModel(torch.nn.Module):
 
         criterion = kwargs.get("criterion", nn.MSELoss())
         kwargs["criterion"] = criterion
+        return kwargs
+
+    def fit(self, X_train, y_train, X_val=None, y_val=None, **kwargs):
+        kwargs = self._set_fit_kwargs(**kwargs)
 
         batch_size = kwargs.get("batch_size", 32)
 
@@ -222,12 +226,13 @@ class HybridModel(BaseModel):
 
 
 class ClassicalModel(BaseModel):
-    def __init__(self):
-        super().__init__()
-        self.clayer_1 = torch.nn.Linear(8*8, 4)
-        self.clayer_2 = torch.nn.Linear(2, 2)
-        self.clayer_3 = torch.nn.Linear(2, 2)
-        self.clayer_4 = torch.nn.Linear(4, 10)
+    def __init__(self, **hp):
+        super().__init__(**hp)
+        self.nb_hidden_neurons = self.hp.get("nb_hidden_neurons", 2)
+        self.clayer_1 = torch.nn.Linear(8*8, 2*self.nb_hidden_neurons)
+        self.clayer_2 = torch.nn.Linear(self.nb_hidden_neurons, self.nb_hidden_neurons)
+        self.clayer_3 = torch.nn.Linear(self.nb_hidden_neurons, self.nb_hidden_neurons)
+        self.clayer_4 = torch.nn.Linear(2*self.nb_hidden_neurons, 10)
         self.softmax = torch.nn.Softmax(dim=1)
 
     def forward(self, x):
@@ -243,9 +248,10 @@ class ClassicalModel(BaseModel):
 
 if __name__ == '__main__':
     from Modules.datasets import MNISTDataset
-    c_model = ClassicalModel()
 
     mnist_dataset = MNISTDataset()
+    c_model = ClassicalModel(nb_hidden_neurons=2)
+    print(c_model)
     history = c_model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32)
     print(c_model.score(*mnist_dataset.getTestData()))
     c_model.show_history(history)
