@@ -53,7 +53,7 @@ class MNISTDataset(Dataset):
         # Fixing the dataset and problem
         self.X, self.y = self.digits.images, self.digits.target
         self.y_ = torch.unsqueeze(torch.tensor(self.y, dtype=int), 1)  # used for one-hot encoded labels
-        self.y_hot = torch.scatter(torch.zeros((self.y.size, np.unique(self.y).size)), 1, self.y_, 1)
+        self.y_hot = torch.scatter(torch.zeros((self.y.size, np.unique(self.y).size)), 1, self.y_, 1).numpy()
 
         if trainingSize + testSize + validationSize != 1:
             raise ValueError("The sum of sizes of the training data, test data and validation data must be 1.")
@@ -63,10 +63,12 @@ class MNISTDataset(Dataset):
             test_size=testSize + validationSize,
             shuffle=False
         )
-        self.X_test, self.X_val, self.y_test_hot, self.y_val_hot = train_test_split(self.X_test,
-                                                                                    self.y_test_hot,
-                                                                                    test_size=testSize,
-                                                                                    shuffle=False)
+        self.X_test, self.X_val, self.y_test_hot, self.y_val_hot = train_test_split(
+            self.X_test,
+            self.y_test_hot,
+            test_size=testSize,
+            shuffle=False
+        )
 
     def __len__(self):
         return len(self.y)
