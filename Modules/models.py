@@ -7,6 +7,7 @@ import pennylane.numpy as np
 import tqdm
 import matplotlib.pyplot as plt
 import os
+import warnings
 
 N_QBITS = 2
 quantum_device = qml.device("default.qubit", wires=N_QBITS)
@@ -18,6 +19,7 @@ class BaseModel(torch.nn.Module):
         self.hp = hp
 
         self.default_use_cuda = torch.cuda.is_available()
+        self.cuda_device = torch.device('cuda:0')
 
     def set_hp(self, **hp):
         raise NotImplementedError()
@@ -60,7 +62,7 @@ class BaseModel(torch.nn.Module):
             'val_loss': []
         }
         if kwargs.get("use_cuda", self.default_use_cuda):
-            self.cuda()
+            self.move_on_gpu()
 
         epochs_id = range(kwargs.get("epochs", 100))
         progress = tqdm.tqdm(
@@ -72,7 +74,7 @@ class BaseModel(torch.nn.Module):
             history["epochs"].append(epoch)
 
             train_loss, train_acc = self.do_epoch(train_data_loader, **kwargs)
-            history["train_loss"].append(train_loss)
+            history["train_loss"].append(train_loss.cpu().detach().numpy())
             history["train_acc"].append(train_acc)
 
             if val_data_loader is not None:
@@ -81,9 +83,11 @@ class BaseModel(torch.nn.Module):
                 history["val_acc"].append(val_acc)
 
             progress.update()
-            progress.set_postfix_str(' '.join([str(_n)+': '+str(_v[-1] if _v else None) for _n, _v in history.items()]))
+            progress.set_postfix_str(' '.join([str(_n)+': '+str(f"{_v[-1]:.2f}" if _v else None)
+                                               for _n, _v in history.items()]))
 
         progress.close()
+        self.move_on_cpu()
         return history
 
     def do_epoch(self, data_loader, **kwargs):
@@ -94,11 +98,7 @@ class BaseModel(torch.nn.Module):
         epoch_mean_acc = 0
         for j, (inputs, targets) in enumerate(data_loader):
             if kwargs.get("use_cuda", self.default_use_cuda):
-                inputs = inputs.cuda()
-                targets = targets.cuda()
-
-            # inputs = Variable(inputs)
-            # targets = Variable(targets)
+                [inputs, targets] = self.move_on_gpu(inputs, targets)
 
             n = j + 1
             batch_loss = self.do_batch(inputs, targets, **kwargs)
@@ -106,15 +106,15 @@ class BaseModel(torch.nn.Module):
             batch_acc = self.score(inputs, targets)
             epoch_mean_acc = (n * epoch_mean_acc + batch_acc) / (n + 1)
 
-        return epoch_mean_acc, epoch_mean_loss
+        return epoch_mean_loss, epoch_mean_acc
 
     def do_batch(self, inputs, targets, **kwargs):
         # Use model.zero_grad() instead of optimizer.zero_grad()
         # Otherwise, variables that are not optimized won't be cleared
         self.zero_grad()
-        output = self(inputs)
+        output = self(inputs.float())
 
-        loss = kwargs["criterion"](output, targets)
+        loss = self.apply_criterion(output, targets, **kwargs)
 
         if kwargs.get("backprop", True):
             loss.backward()
@@ -122,12 +122,44 @@ class BaseModel(torch.nn.Module):
 
         return loss
 
-    def predict(self, X):
-        y_pred = self(X)
-        return torch.argmax(y_pred, axis=1).detach().numpy()
+    def apply_criterion(self, output, targets, **kwargs):
+        return kwargs["criterion"](output, targets)
 
-    def score(self, X, y):
-        return np.mean(self.predict(X) == y)
+    def predict(self, X, use_cuda=True):
+        X = torch.tensor(X).float()
+        if use_cuda:
+            [X] = self.move_on_gpu(X)
+        else:
+            [X] = self.move_on_cpu(X)
+        y_pred = self(X)
+        return torch.argmax(y_pred, axis=1).cpu().detach().numpy()
+
+    def score(self, X, y, use_cuda=True):
+        X = torch.tensor(X).float()
+        y = torch.tensor(y).float()
+        if use_cuda:
+            [X, y] = self.move_on_gpu(X, y)
+        else:
+            [X, y] = self.move_on_cpu(X, y)
+
+        return np.mean(self.predict(X) == torch.argmax(y, axis=1).cpu().detach().numpy())
+
+    def move_on_gpu(self, *objs):
+        gpu_objs = []
+        if torch.cuda.is_available():
+            self.to(self.cuda_device)
+            for obj in objs:
+                gpu_objs.append(obj.to(self.cuda_device))
+        else:
+            warnings.warn("Cuda is not available on this machine")
+        return gpu_objs
+
+    @staticmethod
+    def move_on_cpu(*objs):
+        cpu_objs = []
+        for obj in objs:
+            cpu_objs.append(obj.to("cpu"))
+        return cpu_objs
 
     @staticmethod
     def show_history(history: dict, **kwargs):
@@ -208,5 +240,6 @@ if __name__ == '__main__':
     c_model = ClassicalModel()
 
     moon_dataset = MoonDataset()
-    c_model.fit(moon_dataset.X, moon_dataset.y_hot, batch_size=5)
+    history = c_model.fit(moon_dataset.X, moon_dataset.y_hot, moon_dataset.X, moon_dataset.y_hot, batch_size=5)
     print(c_model.score(moon_dataset.X, moon_dataset.y_hot))
+    c_model.show_history(history)
