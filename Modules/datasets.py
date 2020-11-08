@@ -51,7 +51,7 @@ class MNISTDataset(Dataset):
     def __init__(self,  trainingSize: float = 0.6, testSize: float = 0.2, validationSize: float = 0.2):
         self.digits = sk_datasets.load_digits()
         # Fixing the dataset and problem
-        self.X, self.y = self.digits.images, self.digits.target
+        self.X, self.y = self.digits.images[:, np.newaxis, :, :], self.digits.target
         self.y_ = torch.unsqueeze(torch.tensor(self.y, dtype=int), 1)  # used for one-hot encoded labels
         self.y_hot = torch.scatter(torch.zeros((self.y.size, np.unique(self.y).size)), 1, self.y_, 1).numpy()
 
