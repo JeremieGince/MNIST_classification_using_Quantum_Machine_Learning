@@ -110,16 +110,14 @@ class BaseModel(torch.nn.Module):
         epoch_mean_loss = 0
         epoch_mean_acc = 0
         for j, (inputs, targets) in enumerate(data_loader):
+            inputs, targets = inputs.float(), targets.float()
             if kwargs.get("use_cuda", self.default_use_cuda):
                 [inputs, targets] = self.move_on_gpu(inputs, targets)
 
-            n = j + 1
-            # print(f"inputs.shape : {inputs.shape}")
-            # print(f"targets.shape : {targets.shape}")
             batch_loss = self.do_batch(inputs, targets, **kwargs)
-            epoch_mean_loss = (n * epoch_mean_loss + batch_loss) / (n + 1)
-            batch_acc = self.score(inputs, targets)
-            epoch_mean_acc = (n * epoch_mean_acc + batch_acc) / (n + 1)
+            epoch_mean_loss = (j * epoch_mean_loss + batch_loss) / (j + 1)
+            batch_acc = self.score(inputs, targets, kwargs.get("use_cuda", self.default_use_cuda))
+            epoch_mean_acc = (j * epoch_mean_acc + batch_acc) / (j + 1)
 
         return epoch_mean_loss, epoch_mean_acc
 
@@ -127,7 +125,7 @@ class BaseModel(torch.nn.Module):
         # Use model.zero_grad() instead of optimizer.zero_grad()
         # Otherwise, variables that are not optimized won't be cleared
         self.zero_grad()
-        output = self(inputs.float())
+        output = self(inputs)
 
         loss = self.apply_criterion(output, targets, **kwargs)
 
@@ -162,7 +160,7 @@ class BaseModel(torch.nn.Module):
         else:
             [X, y] = self.move_on_cpu(X, y)
 
-        return np.mean(self.predict(X) == torch.argmax(y, axis=1).cpu().detach().numpy())
+        return np.mean(self.predict(X, use_cuda) == torch.argmax(y, axis=1).cpu().detach().numpy())
 
     def move_on_gpu(self, *objs):
         gpu_objs = []
@@ -206,37 +204,7 @@ class BaseModel(torch.nn.Module):
         plt.show()
 
 
-class HybridModelCaca(BaseModel):
-    def __init__(self):
-        super().__init__()
-
-        self.n_layers = 6
-
-        weight_shapes = {"weights": (self.n_layers, N_QUBITS)}
-
-        self.clayer_1 = torch.nn.Linear(2, 4)
-        self.qlayer_1 = qml.qnn.TorchLayer(self.qnode, weight_shapes)
-        self.qlayer_2 = qml.qnn.TorchLayer(self.qnode, weight_shapes)
-        self.clayer_2 = torch.nn.Linear(4, 2)
-        self.softmax = torch.nn.Softmax(dim=1)
-
-    def forward(self, x):
-        x = self.clayer_1(x.float())
-        x_1, x_2 = torch.split(x, 2, dim=1)
-        x_1 = self.qlayer_1(x_1)
-        x_2 = self.qlayer_2(x_2)
-        x = torch.cat([x_1, x_2], axis=1)
-        x = self.clayer_2(x)
-        return self.softmax(x)
-
-    @qml.qnode(quantum_device)
-    def qnode(self, inputs, weights):
-        qml.templates.AngleEmbedding(inputs, wires=range(N_QUBITS))
-        qml.templates.BasicEntanglerLayers(weights, wires=range(N_QUBITS))
-        return [qml.expval(qml.PauliZ(wires=i)) for i in range(N_QUBITS)]
-
-
-class ClassicalModel(BaseModel):
+class ClassicaMinilModel(BaseModel):
     def __init__(self, **hp):
         super().__init__(**hp)
         self.nb_hidden_neurons = self.hp.get("nb_hidden_neurons", 2)
@@ -273,11 +241,12 @@ class HybridModel(BaseModel):
             if self.classifier_type == 'Q' else ClassicalClassifier(backbone_output_shape, output_shape, **self.hp)
 
     def forward(self, x):
-        # print(x.shape)
+        # print(x.shape, x.device)
         features = self.backbone(x)
-        # print(features.shape)
+        # print(features.shape, features.device)
         y_hat = self.classifier(features)
-        # print(y_hat.shape)
+        # print(y_hat.shape, y_hat.device)
+        # print([param.device for param in self.parameters()])
         return y_hat
 
 
@@ -286,8 +255,16 @@ if __name__ == '__main__':
 
     mnist_dataset = MNISTDataset()
     print(mnist_dataset.getTrainData()[0].shape)
-    model = HybridModel((1, 8, 8), 10, backbone_type='C', classifier_type='Q')
+    model_type = ('Q', 'C')
+    model = HybridModel((1, 8, 8), 10, backbone_type=model_type[0], classifier_type=model_type[1])
     print(model)
-    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32,verbose=True,epochs= 20)
+    history = model.fit(
+        *mnist_dataset.getTrainData(),
+        *mnist_dataset.getValidationData(),
+        batch_size=32,
+        verbose=True,
+        epochs=100,
+        use_cuda=True,
+    )
     print(model.score(*mnist_dataset.getTestData()))
-    model.show_history(history)
+    model.show_history(history, name=''.join(model_type))
