@@ -42,33 +42,12 @@ class QuantumConvolutionLayer(torch.nn.Module):
                 x.shape[2] // self.kernel_size[0],
                 x.shape[3] // self.kernel_size[1]
             )
-        print((*[1 for _ in range(len(x.shape) - len(self.kernel_size))], *self.kernel_size))
-        out1 = generic_filter(x, self.q_filter,
-                              size=(*[1 for _ in range(len(x.shape) - len(self.kernel_size))], *self.kernel_size))
-        print(f"out1.shape: {out1.shape}")
-
-        # out = torch.Tensor(np.array(list(map(self.convolve, x)))).float()
         output_shape = (x.shape[0], x.shape[1]*self.nb_qubits, x.shape[2] // self.kernel_size[0], x.shape[3] // self.kernel_size[1])
         out = torch.zeros(output_shape).to(x.device)
         for i in range(x.shape[0]):
             for j in range(x.shape[1]):
                 out[i] = self.convolve(x[i, j])
-
-        x_flat = self.flatten_x(x)
         return out
-
-    def flatten_x(self, x):
-        out = torch.zeros(self.output_shape).to(x.device)
-        out[:x.shape[0], :x.shape[1], :x.shape[2], :x.shape[3]] = x
-        return out.flatten()
-
-    def unflatten_x(self, x):
-        pass
-
-    def flatten_q_output(self, q_out):
-        out = torch.zeros(self.output_shape).to(x.device)
-        out[0, 0:2] = q_out
-        return out.flatten()
 
     def convolve(self, x):
         # x = torch.squeeze(x)
@@ -76,10 +55,7 @@ class QuantumConvolutionLayer(torch.nn.Module):
         for j in range(0, x.shape[0] - 1):
             for k in range(0, x.shape[1] - 1):
                 # Process a squared 2x2 region of the image with a quantum circuit
-                q_results = self.qnode(
-                    x[j:j + self.kernel_size[0], k:k + self.kernel_size[1]].flatten(),
-                    self.weights
-                )
+                q_results = self.q_filter(x[j:j + self.kernel_size[0], k:k + self.kernel_size[1]].flatten())
                 # Assign expectation values to different channels of the output pixel (j/2, k/2)
                 for c in range(self.nb_qubits):
                     out[c, j // self.kernel_size[0], k // self.kernel_size[1]] = q_results[c]
