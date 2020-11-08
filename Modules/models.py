@@ -285,8 +285,9 @@ if __name__ == '__main__':
     from Modules.datasets import MNISTDataset
 
     mnist_dataset = MNISTDataset()
-    model = HybridModel((1, 8, 8), 10, backbone_type='Q', classifier_type='C')
+    print(mnist_dataset.getTrainData()[0].shape)
+    model = HybridModel((1, 8, 8), 10, backbone_type='C', classifier_type='Q')
     print(model)
-    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32,verbose=True)
+    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32,verbose=True,epochs= 20)
     print(model.score(*mnist_dataset.getTestData()))
     model.show_history(history)

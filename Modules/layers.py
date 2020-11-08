@@ -2,7 +2,7 @@ import pennylane as qml
 from pennylane import numpy as np
 import torch
 from pennylane.templates import RandomLayers
-
+import time
 
 class QuantumConvolutionLayer(torch.nn.Module):
     def __init__(self, **hp):
@@ -32,15 +32,18 @@ class QuantumConvolutionLayer(torch.nn.Module):
 
     def forward(self, x):
         # out = torch.Tensor(np.array(list(map(self.convolve, x)))).float()
-        
+        start = time.time()
+        # print("batch start")
+        out = torch.zeros((x.shape[0],x.shape[1]*self.nb_qubits  ,x.shape[2] // self.kernel_size[0], x.shape[3] // self.kernel_size[1])).to(x.device)
         for i in range(x.shape[0]):
-            self.convolve(x[i])
-        out = torch.Tensor([ ]).float()
+            for j in range(x.shape[1]):
+                out[i] = self.convolve(x[i,j])
+        # print(f"Elapse time :  {time.time() - start}")
         return out
 
     def convolve(self, x):
-        x = torch.squeeze(x)
-        out = torch.zeros((1,x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1], self.nb_qubits))
+        # x = torch.squeeze(x)
+        out = torch.zeros((self.nb_qubits,x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1])).to(x.device)
         for j in range(0, x.shape[0] - 1):
             for k in range(0, x.shape[1] - 1):
                 # Process a squared 2x2 region of the image with a quantum circuit
@@ -50,7 +53,7 @@ class QuantumConvolutionLayer(torch.nn.Module):
                 )
                 # Assign expectation values to different channels of the output pixel (j/2, k/2)
                 for c in range(self.nb_qubits):
-                    out[0,j // self.kernel_size[0], k // self.kernel_size[1], c] = q_results[c]
+                    out[c,j // self.kernel_size[0], k // self.kernel_size[1]] = q_results[c]
         return out
 
 
@@ -59,9 +62,16 @@ class QuantumPseudoLinearLayer(torch.nn.Module):
         super().__init__()
         self.nb_qubits = hp.get("nb_qubits", 2)
         self.n_layers = hp.get("n_layers", 6)
-
+        dev = qml.device("default.qubit", wires=self.nb_qubits)
+        get_circuit = lambda inputs, weights: self.circuit(inputs, weights)
+        self.qnode = qml.QNode(get_circuit, dev, interface='torch')
         weight_shapes = {"weights": (self.n_layers, self.nb_qubits)}
         self.seq = qml.qnn.TorchLayer(self.qnode, weight_shapes)
+
+    def circuit(self, inputs, weights):
+        qml.templates.AngleEmbedding(inputs, wires=range(self.nb_qubits))
+        qml.templates.BasicEntanglerLayers(weights, wires=range(self.nb_qubits))
+        return [qml.expval(qml.PauliZ(wires=i)) for i in range(self.nb_qubits)]
 
     def forward(self, x):
         return self.seq(x)

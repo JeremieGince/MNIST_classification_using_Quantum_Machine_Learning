@@ -17,15 +17,26 @@ class QuantumClassifier(torch.nn.Module):
         self.hp = hp
         self.input_shape = input_shape
         self.output_shape = output_shape
-        self.seq = torch.nn.Sequential(
-            *[QuantumPseudoLinearLayer(nb_qubits=self.input_shape, **hp)
+        self.nb_qubits = hp.get("nb_qubits", 2)
+        self.seq_0 = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(np.prod(self.input_shape), self.nb_qubits),
+            *[QuantumPseudoLinearLayer(nb_qubits=self.nb_qubits, **hp)
               for _ in range(hp.get("nb_q_layer", 2))],
-            torch.nn.Linear(self.input_shape, self.output_shape),
+        )
+        self.seq_1 = torch.nn.Sequential(
+            torch.nn.Flatten(),
+            torch.nn.Linear(np.prod(self.get_output_shape_seq_0()), self.output_shape),
             torch.nn.Softmax(),
         )
+    def get_output_shape_seq_0(self):
+        ones = torch.Tensor(np.ones((1, *self.input_shape))).float()
+        for param in self.parameters():
+            print(param.device)
+        return self.seq_0(ones).shape
 
     def forward(self, x):
-        return self.seq(x)
+        return self.seq_1(self.seq_0(x))
 
 
 class ClassicalClassifier(torch.nn.Module):
@@ -52,5 +63,5 @@ class ClassicalClassifier(torch.nn.Module):
         )
 
     def forward(self, x):
-        x = torch.Tensor(x).float()
+        # x = torch.Tensor(x).float()
         return self.seq(x)
