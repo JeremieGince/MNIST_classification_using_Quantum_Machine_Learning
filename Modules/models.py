@@ -201,7 +201,9 @@ class BaseModel(torch.nn.Module):
         if kwargs.get("saving", True):
             os.makedirs(f"figures", exist_ok=True)
             plt.savefig(f"figures/training_history_{kwargs.get('name', '')}.png", dpi=300)
-        plt.show()
+
+        if kwargs.get("show", False):
+            plt.show(block=kwargs.get("block", True))
 
 
 class ClassicaMinilModel(BaseModel):
@@ -234,8 +236,7 @@ class HybridModel(BaseModel):
         self.backbone = QuantumBackbone(input_shape, output_shape, **self.hp) \
             if self.backbone_type == 'Q' else ClassicalBackbone(input_shape, output_shape, **self.hp)
         backbone_output_shape = self.backbone.get_output_shape()
-        # conv_output = conv_output_shape(input_shape, hp.get("kernel_size", (2, 2)), pad=2)
-        print(f"backbone_output_shape: {backbone_output_shape}")
+
         self.classifier_type = self.hp.get("classifier_type", "Q")
         self.classifier = QuantumClassifier(backbone_output_shape, output_shape, **self.hp) \
             if self.classifier_type == 'Q' else ClassicalClassifier(backbone_output_shape, output_shape, **self.hp)
@@ -252,19 +253,24 @@ class HybridModel(BaseModel):
 
 if __name__ == '__main__':
     from Modules.datasets import MNISTDataset
+    import warnings
+    warnings.filterwarnings("ignore")
 
     mnist_dataset = MNISTDataset()
-    print(mnist_dataset.getTrainData()[0].shape)
-    model_type = ('Q', 'C')
-    model = HybridModel((1, 8, 8), 10, backbone_type=model_type[0], classifier_type=model_type[1])
-    print(model)
-    history = model.fit(
-        *mnist_dataset.getTrainData(),
-        *mnist_dataset.getValidationData(),
-        batch_size=32,
-        verbose=True,
-        epochs=100,
-        use_cuda=True,
-    )
-    print(model.score(*mnist_dataset.getTestData()))
-    model.show_history(history, name=''.join(model_type))
+    epochs = 10
+
+    for model_type in [('C', 'C'), ('C', 'Q'), ('Q', 'C'), ('Q', 'Q')]:
+        print(f'-'*225)
+        model = HybridModel((1, 8, 8), 10, backbone_type=model_type[0], classifier_type=model_type[1])
+        print(model)
+        history = model.fit(
+            *mnist_dataset.getTrainData(),
+            *mnist_dataset.getValidationData(),
+            batch_size=32,
+            verbose=True,
+            epochs=epochs,
+            use_cuda=False,
+        )
+        print(f"model_type: {model_type}, test_score: {model.score(*mnist_dataset.getTestData()):.2f}")
+        model.show_history(history, name=''.join(model_type)+f"_{epochs}epochs")
+        print(f'-' * 225)
