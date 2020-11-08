@@ -69,11 +69,16 @@ class BaseModel(torch.nn.Module):
             self.move_on_gpu()
 
         epochs_id = range(kwargs.get("epochs", 100))
-        progress = tqdm.tqdm(
-            epochs_id,
-            unit="epoch"
-        )
-        kwargs["progress"] = progress
+
+        verbose = kwargs.get("verbose", False)
+        if verbose:
+            progress = tqdm.tqdm(
+                epochs_id,
+                unit="epoch"
+            )
+            kwargs["progress"] = progress
+        else:
+            progress = None
         for epoch in epochs_id:
             history["epochs"].append(epoch)
 
@@ -86,11 +91,12 @@ class BaseModel(torch.nn.Module):
                 history["val_loss"].append(val_loss)
                 history["val_acc"].append(val_acc)
 
-            progress.update()
-            progress.set_postfix_str(' '.join([str(_n)+': '+str(f"{_v[-1]:.2f}" if _v else None)
-                                               for _n, _v in history.items()]))
-
-        progress.close()
+            if verbose:
+                progress.update()
+                progress.set_postfix_str(' '.join([str(_n)+': '+str(f"{_v[-1]:.2f}" if _v else None)
+                                                   for _n, _v in history.items()]))
+        if verbose:
+            progress.close()
         self.move_on_cpu()
         return history
 
@@ -238,12 +244,22 @@ class ClassicalModel(BaseModel):
     def forward(self, x):
         x = torch.reshape(x, (x.shape[0], -1))
         x = self.clayer_1(x)
-        x_1, x_2 = torch.split(x, 2, dim=1)
+        # print(x.shape, [_v.shape for _v in torch.split(x, int(self.nb_hidden_neurons), dim=1)])
+        x_1, x_2 = torch.split(x, int(self.nb_hidden_neurons), dim=1)
         x_1 = self.clayer_2(x_1)
         x_2 = self.clayer_3(x_2)
         x = torch.cat([x_1, x_2], axis=1)
         x = self.clayer_4(x)
         return self.softmax(x)
+
+
+class QuantumBackbone(torch.nn.Module):
+    def __init__(self, **hp):
+        super().__init__()
+        self.hp = hp
+
+    def forward(self, x):
+        pass
 
 
 if __name__ == '__main__':
