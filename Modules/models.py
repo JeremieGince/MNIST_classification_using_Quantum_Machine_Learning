@@ -114,6 +114,8 @@ class BaseModel(torch.nn.Module):
                 [inputs, targets] = self.move_on_gpu(inputs, targets)
 
             n = j + 1
+            # print(f"inputs.shape : {inputs.shape}")
+            # print(f"targets.shape : {targets.shape}")
             batch_loss = self.do_batch(inputs, targets, **kwargs)
             epoch_mean_loss = (n * epoch_mean_loss + batch_loss) / (n + 1)
             batch_acc = self.score(inputs, targets)
@@ -263,19 +265,19 @@ class HybridModel(BaseModel):
         self.backbone_type = self.hp.get("backbone_type", "Q")
         self.backbone = QuantumBackbone(input_shape, output_shape, **self.hp) \
             if self.backbone_type == 'Q' else ClassicalBackbone(input_shape, output_shape, **self.hp)
-
-        conv_output = conv_output_shape(input_shape, hp.get("kernel_size", (2, 2)), pad=2)
-        print(f"conv_output: {conv_output}")
+        backbone_output_shape = self.backbone.get_output_shape()
+        # conv_output = conv_output_shape(input_shape, hp.get("kernel_size", (2, 2)), pad=2)
+        print(f"backbone_output_shape: {backbone_output_shape}")
         self.classifier_type = self.hp.get("classifier_type", "Q")
-        self.classifier = QuantumClassifier(conv_output, output_shape, **self.hp) \
-            if self.classifier_type == 'Q' else ClassicalClassifier(conv_output, output_shape, **self.hp)
+        self.classifier = QuantumClassifier(backbone_output_shape, output_shape, **self.hp) \
+            if self.classifier_type == 'Q' else ClassicalClassifier(backbone_output_shape, output_shape, **self.hp)
 
     def forward(self, x):
-        print(x.shape)
+        # print(x.shape)
         features = self.backbone(x)
-        print(features.shape)
+        # print(features.shape)
         y_hat = self.classifier(features)
-        print(y_hat.shape)
+        # print(y_hat.shape)
         return y_hat
 
 
@@ -283,8 +285,8 @@ if __name__ == '__main__':
     from Modules.datasets import MNISTDataset
 
     mnist_dataset = MNISTDataset()
-    model = HybridModel((8, 8), 10, backbone_type='C', classifier_type='C')
+    model = HybridModel((1, 8, 8), 10, backbone_type='Q', classifier_type='C')
     print(model)
-    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32)
+    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32,verbose=True)
     print(model.score(*mnist_dataset.getTestData()))
     model.show_history(history)

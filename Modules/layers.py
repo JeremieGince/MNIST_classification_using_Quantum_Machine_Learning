@@ -32,11 +32,15 @@ class QuantumConvolutionLayer(torch.nn.Module):
 
     def forward(self, x):
         # out = torch.Tensor(np.array(list(map(self.convolve, x)))).float()
-        out = np.array([np.squeeze(self.convolve(x[i])) for i in range(x.shape[0])])
+        
+        for i in range(x.shape[0]):
+            self.convolve(x[i])
+        out = torch.Tensor([ ]).float()
         return out
 
     def convolve(self, x):
-        out = np.zeros((x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1], self.nb_qubits))
+        x = torch.squeeze(x)
+        out = torch.zeros((1,x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1], self.nb_qubits))
         for j in range(0, x.shape[0] - 1):
             for k in range(0, x.shape[1] - 1):
                 # Process a squared 2x2 region of the image with a quantum circuit
@@ -46,7 +50,7 @@ class QuantumConvolutionLayer(torch.nn.Module):
                 )
                 # Assign expectation values to different channels of the output pixel (j/2, k/2)
                 for c in range(self.nb_qubits):
-                    out[j // self.kernel_size[0], k // self.kernel_size[1], c] = q_results[c]
+                    out[0,j // self.kernel_size[0], k // self.kernel_size[1], c] = q_results[c]
         return out
 
 
