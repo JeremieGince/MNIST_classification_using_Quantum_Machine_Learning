@@ -12,7 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import minmax_scale
 from sklearn.svm import SVC
 
-from Modules.models import ClassicalModel
+from Modules.models import ClassicaMinilModel
 from Modules.hp_optimizers import optimize_parameters, GPOParamGen
 from Modules.datasets import MNISTDataset
 
@@ -25,11 +25,11 @@ if __name__ == '__main__':
     }
 
     gpo = GPOParamGen(bounds_params, max_itr=30)
-    hp = optimize_parameters(ClassicalModel, *mnist_dataset.getTrainData(), gpo, fit_kwargs={"epochs": 20})
+    hp = optimize_parameters(ClassicaMinilModel, *mnist_dataset.getTrainData(), gpo, fit_kwargs={"epochs": 20})
     print(f"\n predicted hp: {hp} \n")
     gpo.show_expectation()
 
-    c_model = ClassicalModel(**hp)
+    c_model = ClassicaMinilModel(**hp)
     print(c_model)
     history = c_model.fit(
         *mnist_dataset.getTrainData(),
