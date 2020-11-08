@@ -8,9 +8,12 @@ import tqdm
 import matplotlib.pyplot as plt
 import os
 import warnings
+from Modules.backbones import QuantumBackbone, ClassicalBackbone
+from Modules.classifiers import QuantumClassifier, ClassicalClassifier
+from Modules.util import conv_output_shape
 
-N_QBITS = 2
-quantum_device = qml.device("default.qubit", wires=N_QBITS)
+N_QUBITS = 2
+quantum_device = qml.device("default.qubit", wires=N_QUBITS)
 
 
 class BaseModel(torch.nn.Module):
@@ -22,7 +25,7 @@ class BaseModel(torch.nn.Module):
         self.cuda_device = torch.device('cuda:0')
 
     def set_hp(self, **hp):
-        raise NotImplementedError()
+        self.hp = hp
 
     def _set_fit_kwargs(self, **kwargs):
         optimizer_parameters = kwargs.get("optimizer_parameters",
@@ -201,13 +204,13 @@ class BaseModel(torch.nn.Module):
         plt.show()
 
 
-class HybridModel(BaseModel):
+class HybridModelCaca(BaseModel):
     def __init__(self):
         super().__init__()
 
         self.n_layers = 6
 
-        weight_shapes = {"weights": (self.n_layers, N_QBITS)}
+        weight_shapes = {"weights": (self.n_layers, N_QUBITS)}
 
         self.clayer_1 = torch.nn.Linear(2, 4)
         self.qlayer_1 = qml.qnn.TorchLayer(self.qnode, weight_shapes)
@@ -226,9 +229,9 @@ class HybridModel(BaseModel):
 
     @qml.qnode(quantum_device)
     def qnode(self, inputs, weights):
-        qml.templates.AngleEmbedding(inputs, wires=range(N_QBITS))
-        qml.templates.BasicEntanglerLayers(weights, wires=range(N_QBITS))
-        return [qml.expval(qml.PauliZ(wires=i)) for i in range(N_QBITS)]
+        qml.templates.AngleEmbedding(inputs, wires=range(N_QUBITS))
+        qml.templates.BasicEntanglerLayers(weights, wires=range(N_QUBITS))
+        return [qml.expval(qml.PauliZ(wires=i)) for i in range(N_QUBITS)]
 
 
 class ClassicalModel(BaseModel):
@@ -253,21 +256,35 @@ class ClassicalModel(BaseModel):
         return self.softmax(x)
 
 
-class QuantumBackbone(torch.nn.Module):
-    def __init__(self, **hp):
-        super().__init__()
-        self.hp = hp
+class HybridModel(BaseModel):
+    def __init__(self, input_shape, output_shape, **hp):
+        super().__init__(**hp)
+
+        self.backbone_type = self.hp.get("backbone_type", "Q")
+        self.backbone = QuantumBackbone(input_shape, output_shape, **self.hp) \
+            if self.backbone_type == 'Q' else ClassicalBackbone(input_shape, output_shape, **self.hp)
+
+        conv_output = conv_output_shape(input_shape, hp.get("kernel_size", (2, 2)), pad=2)
+        print(f"conv_output: {conv_output}")
+        self.classifier_type = self.hp.get("classifier_type", "Q")
+        self.classifier = QuantumClassifier(conv_output, output_shape, **self.hp) \
+            if self.classifier_type == 'Q' else ClassicalClassifier(conv_output, output_shape, **self.hp)
 
     def forward(self, x):
-        pass
+        print(x.shape)
+        features = self.backbone(x)
+        print(features.shape)
+        y_hat = self.classifier(features)
+        print(y_hat.shape)
+        return y_hat
 
 
 if __name__ == '__main__':
     from Modules.datasets import MNISTDataset
 
     mnist_dataset = MNISTDataset()
-    c_model = ClassicalModel(nb_hidden_neurons=2)
-    print(c_model)
-    history = c_model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32)
-    print(c_model.score(*mnist_dataset.getTestData()))
-    c_model.show_history(history)
+    model = HybridModel((8, 8), 10, backbone_type='C', classifier_type='C')
+    print(model)
+    history = model.fit(*mnist_dataset.getTrainData(), *mnist_dataset.getValidationData(), batch_size=32)
+    print(model.score(*mnist_dataset.getTestData()))
+    model.show_history(history)
