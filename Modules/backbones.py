@@ -3,6 +3,7 @@ from torch.nn import Conv2d
 from Modules.layers import QuantumConvolutionLayer
 from pennylane import numpy as np
 
+
 class QuantumBackbone(torch.nn.Module):
     def __init__(self, input_shape, output_shape, **hp):
         super().__init__()
@@ -20,8 +21,6 @@ class QuantumBackbone(torch.nn.Module):
     def get_output_shape(self):
         ones = torch.tensor(np.ones((1, *self.input_shape))).float()
         return self(ones).shape
-
-
 
 
 class ClassicalBackbone(torch.nn.Module):
