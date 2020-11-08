@@ -29,10 +29,9 @@ class QuantumClassifier(torch.nn.Module):
             torch.nn.Linear(np.prod(self.get_output_shape_seq_0()), self.output_shape),
             torch.nn.Softmax(),
         )
+
     def get_output_shape_seq_0(self):
         ones = torch.Tensor(np.ones((1, *self.input_shape))).float()
-        for param in self.parameters():
-            print(param.device)
         return self.seq_0(ones).shape
 
     def forward(self, x):
@@ -42,7 +41,6 @@ class QuantumClassifier(torch.nn.Module):
 class ClassicalClassifier(torch.nn.Module):
     def __init__(self, input_shape, output_shape, **hp):
         super(ClassicalClassifier, self).__init__()
-        # print(input_shape)
         self.hp = hp
         self.input_shape = input_shape
         self.output_shape = output_shape
