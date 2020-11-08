@@ -2,6 +2,7 @@ import pennylane as qml
 from pennylane import numpy as np
 import torch
 from pennylane.templates import RandomLayers
+import torch.multiprocessing as mp
 
 
 class QuantumConvolutionLayer(torch.nn.Module):
@@ -16,8 +17,8 @@ class QuantumConvolutionLayer(torch.nn.Module):
         rand_params = np.random.uniform(high=2 * np.pi, size=self.kernel_size)
         self.weights = torch.tensor(rand_params).float()
 
-        self.get_circuit = lambda phi, layer_param: self.circuit(phi, layer_param)
-        self.qnode = qml.QNode(self.get_circuit, dev, interface='torch')
+        get_circuit = lambda phi, layer_param: self.circuit(phi, layer_param)
+        self.qnode = qml.QNode(get_circuit, dev, interface='torch')
 
     def circuit(self, phi=None, layer_params=None):
         # Encoding of 4 classical input values
@@ -31,32 +32,30 @@ class QuantumConvolutionLayer(torch.nn.Module):
         return [qml.expval(qml.PauliZ(j)) for j in range(self.nb_qubits)]
 
     def forward(self, x):
+        # out = np.zeros((x.shape[0], x.shape[-2]//self.kernel_size[0], x.shape[-1]//self.kernel_size[1], self.nb_qubits))
+        # for i in range(x.shape[-1]):
+        #     out[i] = self.convolve(x[i])
         print(x.shape)
-        x = torch.reshape(x, (*x.shape[1:], x.shape[0]))
-        print(x.shape)
-        out = np.zeros((x.shape[0]//self.kernel_size[0], x.shape[1]//self.kernel_size[1], self.nb_qubits, x.shape[-1]))
+        out = np.apply_along_axis(self.convolve, 0, x)
+        return out
 
-        for i in range(x.shape[-1]):
-            # Loop over the coordinates of the top-left pixel of 2X2 squares
-            # for j in range(0, x.shape[0], self.kernel_size[0]):
-            #     for k in range(0, x.shape[1], self.kernel_size[1]):
-            for j in range(0, x.shape[0]-1):
-                for k in range(0, x.shape[1]-1):
-                    # Process a squared 2x2 region of the image with a quantum circuit
-                    q_results = self.qnode(
-                        # phi=[
-                        #     x[j+jj, k+kk, i]
-                        #     for jj in range(self.kernel_size[0])
-                        #     for kk in range(self.kernel_size[1])
-                        # ],
-                        x[j:j+self.kernel_size[0], k:k+self.kernel_size[1]].flatten(),
-                        self.weights
-                    )
-                    # Assign expectation values to different channels of the output pixel (j/2, k/2)
-                    for c in range(self.nb_qubits):
-                        out[j // 2, k // 2, c, i] = q_results[c]
-        out = torch.reshape(torch.Tensor(out).float(), (out.shape[-1], *out.shape[:-1]))
-        print(out.shape)
+    def convolve_on(self, x, out, ids):
+        for i in ids:
+            out[:, :, :, i] = self.convolve(x[i])
+
+    def convolve(self, x):
+        print(type(x))
+        out = np.zeros((x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1], self.nb_qubits))
+        for j in range(0, x.shape[0] - 1):
+            for k in range(0, x.shape[1] - 1):
+                # Process a squared 2x2 region of the image with a quantum circuit
+                q_results = self.qnode(
+                    x[j:j + self.kernel_size[0], k:k + self.kernel_size[1]].flatten(),
+                    self.weights
+                )
+                # Assign expectation values to different channels of the output pixel (j/2, k/2)
+                for c in range(self.nb_qubits):
+                    out[j // self.kernel_size[0], k // self.kernel_size[1], c] = q_results[c]
         return out
 
 
@@ -64,9 +63,9 @@ if __name__ == '__main__':
     import time
 
     s = time.time()
-    q_conv_layer = QuantumConvolutionLayer()
-    q_conv_layer.cuda()
-    inputs = torch.Tensor(np.ones((32, 8, 8))).float().cuda()
+    q_conv_layer = QuantumConvolutionLayer(kernel_size=(2, 2))
+    inputs = torch.Tensor(np.ones((32, 8, 8))).float()
     outputs = q_conv_layer(inputs)
+    print(outputs.shape)
 
     print(f"elapse time: {time.time()-s:.2f}")
