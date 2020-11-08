@@ -2,7 +2,6 @@ import pennylane as qml
 from pennylane import numpy as np
 import torch
 from pennylane.templates import RandomLayers
-import torch.multiprocessing as mp
 
 
 class QuantumConvolutionLayer(torch.nn.Module):
@@ -32,11 +31,8 @@ class QuantumConvolutionLayer(torch.nn.Module):
         return [qml.expval(qml.PauliZ(j)) for j in range(self.nb_qubits)]
 
     def forward(self, x):
-        # out = np.zeros((x.shape[0], x.shape[-2]//self.kernel_size[0], x.shape[-1]//self.kernel_size[1], self.nb_qubits))
-        # for i in range(x.shape[-1]):
-        #     out[i] = self.convolve(x[i])
-        print(x.shape)
-        out = np.apply_along_axis(self.convolve, 0, x)
+        # out = torch.Tensor(np.array(list(map(self.convolve, x)))).float()
+        out = np.array([self.convolve(x[i]) for i in range(x.shape[0])])
         return out
 
     def convolve_on(self, x, out, ids):
@@ -44,7 +40,6 @@ class QuantumConvolutionLayer(torch.nn.Module):
             out[:, :, :, i] = self.convolve(x[i])
 
     def convolve(self, x):
-        print(type(x))
         out = np.zeros((x.shape[0] // self.kernel_size[0], x.shape[1] // self.kernel_size[1], self.nb_qubits))
         for j in range(0, x.shape[0] - 1):
             for k in range(0, x.shape[1] - 1):
@@ -63,7 +58,7 @@ if __name__ == '__main__':
     import time
 
     s = time.time()
-    q_conv_layer = QuantumConvolutionLayer(kernel_size=(2, 2))
+    q_conv_layer = QuantumConvolutionLayer(kernel_size=(2, 2), nb_qubits=4)
     inputs = torch.Tensor(np.ones((32, 8, 8))).float()
     outputs = q_conv_layer(inputs)
     print(outputs.shape)
