@@ -61,5 +61,4 @@ class ClassicalClassifier(torch.nn.Module):
         )
 
     def forward(self, x):
-        # x = torch.Tensor(x).float()
         return self.seq(x)
